@@ -1,63 +1,28 @@
-# ===== Python backend =====
+﻿# ===== Python backend =====
 __pycache__/
 *.py[cod]
-*.so
-*.egg
 *.egg-info/
-dist/
-build/
 venv/
 .env
-.DS_Store
-
-# Virtual environment
-.env/
-.venv/
-env/
-ENV/
 
 # ===== Node.js frontend =====
 node_modules/
 npm-debug.log*
-yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
-package-lock.json
-.next/
-out/
-build/
-dist/
 
-# ===== IDE and editor settings =====
+# ===== IDE & OS =====
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# ===== OS generated files =====
 .DS_Store
 Thumbs.db
 
-# ===== Logs and temporary files =====
+# ===== Logs & build =====
 *.log
-*.tmp
-*.bak
-*.orig
-
-# ===== Docker =====
-*.pid
-*.seed
-docker-compose.override.yml
+build/
+dist/
 
 # ===== Database / Mock data =====
 backend/db/*.sqlite3
 backend/db/*.db
 *.csv
 *.json
-
-# ===== PDF or test outputs =====
-*.pdf
-*.png
-*.jpg
-*.jpeg
-*.gif
