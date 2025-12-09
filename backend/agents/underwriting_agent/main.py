@@ -1,7 +1,8 @@
 import uvicorn
 import httpx
 import logging
-import math  # NEW: We need this for the EMI calculation
+import math
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -11,51 +12,73 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-# This is the service this agent CALLS
 CREDIT_BUREAU_URL = "http://127.0.0.1:9002/credit_score"
 
-# --- NEW: Expanded Request Model ---
-# The Master Agent MUST send all of this
+# --- Models ---
 class UnderwriteRequest(BaseModel):
     customer_id: str
     requested_loan_amount: int
-    pre_approved_limit: int  # We need this to check the 1x/2x rules
-    monthly_salary: int      # We need this for the EMI check
-    interest_rate: float     # Annual interest rate (e.g., 8.5)
-    loan_tenure_months: int  # e.g., 36
+    pre_approved_limit: int
+    monthly_salary: int
+    interest_rate: float
+    loan_tenure_months: int
 
-# This is the model we EXPECT from the Credit Bureau
 class CreditScoreResponse(BaseModel):
     cust_id: str
     score: int
 
-# --- NEW: EMI Calculation Function ---
+# --- RISK ENGINE LOGIC ---
+def calculate_risk_profile(credit_score: int, requested_rate: float, requested_tenure: int):
+    """
+    Determines risk category and adjusts terms (Rate & Tenure) based on CIBIL score.
+    Simulates a sophisticated Rule Engine found in LOS platforms.
+    """
+    # Defaults
+    risk_category = "Unknown"
+    spread = 0.0
+    max_tenure = 60 # Standard max is 5 years
+
+    if credit_score >= 800:
+        risk_category = "Excellent"
+        spread = -0.5  # Reward: 0.5% discount
+        max_tenure = 72 # Bonus: Allow 6 years
+    elif credit_score >= 750:
+        risk_category = "Low Risk"
+        spread = 0.0   # Standard rate
+        max_tenure = 60
+    elif credit_score >= 700:
+        risk_category = "Medium Risk"
+        spread = 1.5   # Penalty: +1.5% interest
+        max_tenure = 48 # Restriction: Max 4 years
+    elif credit_score >= 650:
+        risk_category = "High Risk"
+        spread = 3.5   # Heavy Penalty: +3.5% interest
+        max_tenure = 24 # Strict Restriction: Max 2 years
+    else:
+        return None # Score too low, automatic rejection
+
+    # Calculate final terms
+    final_rate = round(requested_rate + spread, 2)
+    final_tenure = min(requested_tenure, max_tenure)
+
+    return {
+        "risk_category": risk_category,
+        "final_rate": final_rate,
+        "final_tenure": final_tenure,
+        "message": f"Rated {risk_category}. Spread: {spread:+.1f}%"
+    }
+
 def calculate_emi(p: int, r_annual: float, n_months: int) -> float:
-    """
-    Calculates the Equated Monthly Installment (EMI).
-    P = Principal loan amount
-    r_annual = Annual interest rate
-    n_months = Number of months
-    """
-    if n_months <= 0 or r_annual < 0:
-        return 0.0
-    
-    # Convert annual rate to monthly rate
+    """Calculates EMI."""
+    if n_months <= 0 or r_annual < 0: return 0.0
     r_monthly = r_annual / (12 * 100)
-    
-    # Handle 0% interest rate
-    if r_monthly == 0:
-        return p / n_months
-        
-    # EMI formula: P * r * (1+r)^n / ((1+r)^n - 1)
+    if r_monthly == 0: return p / n_months
     try:
         numerator = p * r_monthly * math.pow(1 + r_monthly, n_months)
         denominator = math.pow(1 + r_monthly, n_months) - 1
-        emi = numerator / denominator
-        return emi
-    except (OverflowError, ZeroDivisionError):
+        return numerator / denominator
+    except:
         return float('inf')
-
 
 # --- HTTP Client ---
 app_http_client = None
@@ -67,92 +90,98 @@ async def lifespan(app: FastAPI):
     yield
     await app_http_client.close()
 
-app = FastAPI(title="Underwriting Agent", lifespan=lifespan)
+app = FastAPI(title="Underwriting Agent (Risk Engine)", lifespan=lifespan)
 
-# --- Helper Function ---
+# --- Helper ---
 async def call_credit_bureau(customer_id: str) -> CreditScoreResponse:
-    """Calls the Mock Credit Bureau service."""
-    url = f"{CREDIT_BUREAU_URL}?cust_id={customer_id}"
     try:
-        response = await app_http_client.get(url)
+        response = await app_http_client.get(f"{CREDIT_BUREAU_URL}?cust_id={customer_id}")
         response.raise_for_status()
         return CreditScoreResponse(**response.json())
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Credit Bureau returned {e.response.status_code} for {customer_id}")
-        raise
-    except httpx.RequestError as e:
-        logger.error(f"Could not connect to Credit Bureau: {e}")
+    except Exception as e:
+        logger.error(f"Credit Bureau Error: {e}")
         raise
 
 # --- API Endpoints ---
 @app.get("/")
-def root():
-    return {"message": "Underwriting Agent is live!"}
+def root(): return {"message": "Underwriting Risk Engine is live!"}
 
 @app.post("/underwrite")
 async def underwrite(request: UnderwriteRequest):
-    """
-    Performs underwriting using the full PDF logic:
-    1. Checks credit score.
-    2. Checks 1x pre-approved limit.
-    3. Checks 2x pre-approved limit + EMI 50% salary rule.
-    """
-    logger.info(f"Underwriting request for {request.customer_id} for ₹{request.requested_loan_amount}")
+    logger.info(f"Underwriting for {request.customer_id}: Amount {request.requested_loan_amount}")
 
-    # --- Rule 0: Get Credit Score ---
+    # 1. Fetch CIBIL Score
     try:
         score_data = await call_credit_bureau(request.customer_id)
         credit_score = score_data.score
-        logger.info(f"Customer {request.customer_id} score is {credit_score}")
-        
-        if credit_score < 700:
-            logger.warn(f"REJECTED: Customer {request.customer_id} score ({credit_score}) is below 700.")
-            return {"status": "rejected", "reason": "Credit score is below the 700 minimum."}
+        logger.info(f"Fetched CIBIL Score: {credit_score}")
+    except:
+        raise HTTPException(status_code=503, detail="Credit Bureau unavailable")
+
+    # 2. Hard Stop: Minimum Score
+    if credit_score < 650:
+        return {
+            "status": "rejected",
+            "reason": f"Credit score {credit_score} is below the policy minimum of 650.",
+            "approved_amount": 0
+        }
+
+    # 3. Policy Limit Check
+    # Rule: Absolute hard limit is 2x pre-approved offer.
+    # Note: 'risk_customers' asking for >2x limit are rejected here.
+    if request.requested_loan_amount > (2 * request.pre_approved_limit):
+         return {
+            "status": "rejected",
+            "reason": f"Requested amount exceeds maximum eligibility limit (2x Pre-approved).",
+            "approved_amount": 0
+        }
+
+    # 4. Risk Engine: Calculate Adjusted Terms
+    # This is where the 'Flexible Rate' magic happens
+    risk_profile = calculate_risk_profile(
+        credit_score, 
+        request.interest_rate, 
+        request.loan_tenure_months
+    )
     
-    except (httpx.RequestError, httpx.HTTPStatusError):
-        logger.error(f"Could not fetch credit score for {request.customer_id}.")
-        raise HTTPException(status_code=503, detail="Could not connect to Credit Bureau.")
+    if not risk_profile: # Should be covered by <650 check, but safe fallback
+        return {"status": "rejected", "reason": "Risk profile ineligible."}
 
-    # --- PDF Business Logic ---
-    p = request.requested_loan_amount
-    limit = request.pre_approved_limit
-    salary = request.monthly_salary
+    final_rate = risk_profile["final_rate"]
+    final_tenure = risk_profile["final_tenure"]
+    
+    logger.info(f"Risk Profile: {risk_profile['risk_category']}. Rate adjusted from {request.interest_rate}% to {final_rate}%. Tenure cap: {final_tenure}m")
 
-    # --- Rule 1: <= Pre-approved limit ---
-    if p <= limit:
-        logger.info(f"APPROVED: {p} is within pre-approved limit of {limit}.")
-        return {"status": "approved", "reason": "Amount is within pre-approved limit."}
+    # 5. Affordability Check (EMI vs Salary)
+    # We must use the NEW rate and NEW tenure for this calculation
+    final_emi = calculate_emi(request.requested_loan_amount, final_rate, final_tenure)
+    max_allowed_emi = request.monthly_salary * 0.50
 
-    # --- Rule 2: > 2x Pre-approved limit ---
-    if p > (2 * limit):
-        logger.warn(f"REJECTED: {p} is > 2x pre-approved limit of {limit}.")
-        return {"status": "rejected", "reason": f"Requested amount (₹{p}) is more than 2x your pre-approved limit (₹{limit})."}
+    logger.info(f"New EMI: {final_emi:.2f} | Max Allowed: {max_allowed_emi}")
 
-    # --- Rule 3: Between 1x and 2x limit (EMI Check) ---
-    if limit < p <= (2 * limit):
-        logger.info(f"Amount {p} is > 1x limit, checking EMI against salary {salary}...")
-        
-        # Check for placeholder salary (if user was on easy path)
-        if salary <= 0:
-            logger.warn(f"REJECTED: Salary check required but no salary provided.")
-            return {"status": "rejected", "reason": "Salary verification is required for this amount."}
+    if final_emi > max_allowed_emi:
+        # User cannot afford this loan at the RISK-ADJUSTED rate
+        return {
+            "status": "rejected",
+            "reason": (
+                f"Based on your credit profile ({risk_profile['risk_category']}), "
+                f"the adjusted interest rate is {final_rate}% for {final_tenure} months. "
+                f"The resulting EMI ({int(final_emi)}) exceeds 50% of your salary."
+            ),
+            "approved_amount": 0
+        }
 
-        emi = calculate_emi(p, request.interest_rate, request.loan_tenure_months)
-        max_allowed_emi = salary * 0.50
-        
-        logger.info(f"Calculated EMI: ₹{emi:.2f}. Max allowed EMI (50% salary): ₹{max_allowed_emi:.2f}")
+    # 6. Approval
+    return {
+        "status": "approved",
+        "reason": f"Approved. {risk_profile['message']}",
+        "approved_amount": request.requested_loan_amount,
+        # Return the MODIFIED terms
+        "final_interest_rate": final_rate,
+        "final_tenure": final_tenure,
+        "final_emi": int(final_emi),
+        "risk_category": risk_profile['risk_category']
+    }
 
-        if emi <= max_allowed_emi:
-            logger.info(f"APPROVED: EMI (₹{emi:.2f}) is within 50% of salary.")
-            return {"status": "approved", "reason": "Approved based on income verification."}
-        else:
-            logger.warn(f"REJECTED: EMI (₹{emi:.2f}) exceeds 50% of salary (₹{max_allowed_emi:.2f}).")
-            return {"status": "rejected", "reason": f"Your EMI (₹{emi:.2f}/mo) would exceed 50% of your monthly salary."}
-
-    # Fallback (shouldn't be reached)
-    return {"status": "rejected", "reason": "Invalid loan parameters."}
-
-# --- Run the App ---
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8003)
-
