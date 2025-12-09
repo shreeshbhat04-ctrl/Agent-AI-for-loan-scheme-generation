@@ -4,7 +4,7 @@ A multi-agent AI system based on RAG and based on Langraph-framework.
 
 This project implements a Hybrid AI Architecture combining the flexibility of Large Language Models (Google Gemini) with the reliability of deterministic code (Python/SQL). It orchestrates a team of specialized "Worker Agents" to handle sales with implemented webscrapper to feed relaible data to the LLM so it will be reliable to use, identity verification, risk underwriting, document processing, and sanction letter generation.
 
-Key Features
+#Key Features
 
 Intelligent Orchestration: Uses LangGraph to manage conversation state, memory, and tool execution.
 
@@ -12,7 +12,7 @@ Document Intelligence: A dedicated DocProcessor Agent uses OCR (Tesseract) and L
 
 Risk-Based Underwriting: A sophisticated underwriting engine that adjusts interest rates and tenures dynamically based on credit scores (CIBIL logic).
 
-Robust Data Persistence:
+#Robust Data Persistence:
 
 PostgreSQL: Stores customer profiles, loan application status, and structural relational data.
 
@@ -49,15 +49,16 @@ Sanction:Generates PDF letters and archives chat history to MongoDB.
 DocProcessor:Extracts text/data from uploaded files (OCR/LLM).
 Plus 3 Mock Services for CRM, Credit Bureau, and Offer Mart 
 
-Installation & Setup
+#Installation & Setup
 
 1. Clone the Repository
 
    git clone [https://github.com/your-username/agent-ai-loan-chatbot.git](https://github.com/your-username/agent-ai-loan-chatbot.git)
+
    cd agent-ai-loan-chatbot
 
 
-2. Prerequisites
+3. Prerequisites
 
 Ensure you have the following installed:
 Python 3.10+
@@ -120,7 +121,7 @@ Run the provided helper script from the backend/ folder:
 
 .\run_all.ps1
 
-Launch Frontend
+#Launch Frontend
 
 Simply open frontend/index.html in your web browser.
 
