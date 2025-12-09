@@ -53,8 +53,8 @@ Installation & Setup
 
 1. Clone the Repository
 
-git clone [https://github.com/your-username/agent-ai-loan-chatbot.git](https://github.com/your-username/agent-ai-loan-chatbot.git)
-cd agent-ai-loan-chatbot
+   git clone [https://github.com/your-username/agent-ai-loan-chatbot.git](https://github.com/your-username/agent-ai-loan-chatbot.git)
+   cd agent-ai-loan-chatbot
 
 
 2. Prerequisites
