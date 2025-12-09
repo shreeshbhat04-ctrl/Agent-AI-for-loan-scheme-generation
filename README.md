@@ -128,7 +128,7 @@ Run the provided helper script from the backend/ folder:
 
 Simply open frontend/index.html in your web browser.
 
-Future Developments
+# Future Developments
 
 The current system is a robust prototype.Future advancements are:
 
