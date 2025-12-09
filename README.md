@@ -52,24 +52,27 @@ Plus 3 Mock Services for CRM, Credit Bureau, and Offer Mart
 # Installation & Setup
 
 1. Clone the Repository
+```bash
 
-   git clone [https://github.com/your-username/agent-ai-loan-chatbot.git](https://github.com/your-username/agent-ai-loan-chatbot.git)
+git clone https://github.com/ shreeshbhat04-ctrl/Agent-AI-for-loan-scheme-generation
 
-   cd agent-ai-loan-chatbot
-
-
-3. Prerequisites
+cd agent-ai-loan-chatbot
+```
+ 
+2. Prerequisites
 
 Ensure you have the following installed:
+```bash
 Python 3.10+
 PostgreSQL 
 MongoDB 
 Tesseract OCR (Required for document processing. Download here)
+```
 
 3. Environment Setup (Backend)
 
 Navigate to the backend directory and set up the virtual environment:
-
+```bash
 cd backend
 python -m venv venv
 
@@ -78,24 +81,24 @@ python -m venv venv
 .\venv\Scripts\Activate
 # Mac/Linux:
 source venv/bin/activate
-
+```
 
 4. Install Dependencies
 
 Install all requirements for all agents at once:
-
+```bash
 pip install -r requirements.txt --trusted-host pypi.org --trusted-host files.pythonhosted.org
-
+```
 
 5. Database Configuration
 
 Create a PostgreSQL database named loan_chatbot_db.
 
 Run the setup script to create tables (customers, loans, chat_messages) and seed dummy data:
-
+```bash
 cd db
 python setup_postgres_db.py
-
+```
 
 6. Environment Variables
 
@@ -112,16 +115,16 @@ MONGO_URI=mongodb://localhost:27017/
 TESSERACT_CMD=C:/Program Files/Tesseract-OCR/tesseract.exe
 
 
- How to Run
+ # How to Run
 
 Since this is a microservices architecture, you need to run the agents simultaneously.
 
  Using the PowerShell Script (Windows)
 Run the provided helper script from the backend/ folder:
-
+```bash
 .\run_all.ps1
-
-#Launch Frontend
+```
+# Launch Frontend
 
 Simply open frontend/index.html in your web browser.
 
@@ -146,4 +149,6 @@ Implementation: Add Speech-to-Text (STT) (e.g., OpenAI Whisper) to convert voice
 Goal: Assist users with filling out government portal forms (like JanSamarth) automatically.
 
 Implementation: Create a new "Navigator Agent" using tools like Selenium or Puppeteer. Once the user provides their details to the chatbot, this agent would physically navigate to the internal and external website and auto-fill the application forms, reducing manual effort.
+
+
 
