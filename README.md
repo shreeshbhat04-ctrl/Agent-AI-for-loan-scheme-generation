@@ -4,7 +4,7 @@ A multi-agent AI system based on RAG and based on Langraph-framework.
 
 This project implements a Hybrid AI Architecture combining the flexibility of Large Language Models (Google Gemini) with the reliability of deterministic code (Python/SQL). It orchestrates a team of specialized "Worker Agents" to handle sales with implemented webscrapper to feed relaible data to the LLM so it will be reliable to use, identity verification, risk underwriting, document processing, and sanction letter generation.
 
-#Key Features
+# Key Features
 
 Intelligent Orchestration: Uses LangGraph to manage conversation state, memory, and tool execution.
 
@@ -12,7 +12,7 @@ Document Intelligence: A dedicated DocProcessor Agent uses OCR (Tesseract) and L
 
 Risk-Based Underwriting: A sophisticated underwriting engine that adjusts interest rates and tenures dynamically based on credit scores (CIBIL logic).
 
-#Robust Data Persistence:
+# Robust Data Persistence:
 
 PostgreSQL: Stores customer profiles, loan application status, and structural relational data.
 
@@ -22,7 +22,7 @@ Hybrid Sales Agent: Checks for pre-approved offers first, then falls back to an 
 
 PDF Generation: Automatically generates and saves legally formatted Sanction Letters.
 
-#Tech Stack
+# Tech Stack
 
 Language: Python 3.11+
 
@@ -38,7 +38,7 @@ Document Processing: PyMuPDF, Pytesseract, Pillow
 
 Frontend: HTML/JS/TailwindCSS (Responsive Chat UI)
 
-#Architecture Overview
+# Architecture Overview
 
 The system consists of Master Agent (The Brain) and 5 Specialized Worker Agents running on different ports:
 Master Agent:The LangGraph orchestrator. Manages user intent and routes tasks.
@@ -49,7 +49,7 @@ Sanction:Generates PDF letters and archives chat history to MongoDB.
 DocProcessor:Extracts text/data from uploaded files (OCR/LLM).
 Plus 3 Mock Services for CRM, Credit Bureau, and Offer Mart 
 
-#Installation & Setup
+# Installation & Setup
 
 1. Clone the Repository
 
