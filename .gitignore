@@ -1,4 +1,4 @@
-# ===== Python backend =====
+﻿# ===== Python backend =====
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -26,17 +26,3 @@ backend/db/*.sqlite3
 backend/db/*.db
 *.csv
 *.json
-
-# ===== PDF or test outputs =====
-*.pdf
-*.png
-*.jpg
-*.jpeg
-*.gif
-
-# ===== Secrets - VERY IMPORTANT =====
-# Ignore all .env files
-.env
-
-# Be specific about the one we created
-backend/master_agent/.env
