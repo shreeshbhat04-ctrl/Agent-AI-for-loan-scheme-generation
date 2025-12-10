@@ -1,4 +1,5 @@
 # ===== Python backend =====
+
 __pycache__/
 *.py[cod]
 *.so
@@ -61,3 +62,11 @@ backend/db/*.db
 *.jpg
 *.jpeg
 *.gif
+
+# ===== Secrets - VERY IMPORTANT =====
+
+# Ignore all .env files
+.env
+
+# Be specific about the one we created
+backend/master_agent/.env
