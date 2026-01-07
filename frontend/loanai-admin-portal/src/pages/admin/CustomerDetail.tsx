@@ -2,13 +2,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { ChatHistory } from '@/components/admin/ChatHistory';
 import { DocumentViewer } from '@/components/admin/DocumentViewer';
-import { getCustomerById, getChatHistoryByCustomer } from '@/data/customers';
-import { 
-  ArrowLeft, 
-  User, 
-  Phone, 
-  MapPin, 
-  CreditCard, 
+import { getCustomerDetail, getChatHistory } from '@/api/admin';
+import { useQuery } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  User,
+  Phone,
+  MapPin,
+  CreditCard,
   Calendar,
   IndianRupee,
   Shield,
@@ -21,9 +23,28 @@ import { cn } from '@/lib/utils';
 const CustomerDetail = () => {
   const { custId } = useParams<{ custId: string }>();
   const navigate = useNavigate();
-  
-  const customer = getCustomerById(custId || '');
-  const chatMessages = getChatHistoryByCustomer(custId || '');
+
+  const { data: customer, isLoading: isLoadingCustomer } = useQuery({
+    queryKey: ['customer', custId],
+    queryFn: () => getCustomerDetail(custId!),
+    enabled: !!custId
+  });
+
+  const { data: chatMessages = [] } = useQuery({
+    queryKey: ['chat', custId],
+    queryFn: () => getChatHistory(custId!),
+    enabled: !!custId
+  });
+
+  if (isLoadingCustomer) {
+    return (
+      <AdminLayout>
+        <div className="flex justify-center items-center h-screen">
+          <Loader2 className="animate-spin w-10 h-10 text-primary" />
+        </div>
+      </AdminLayout>
+    )
+  }
 
   if (!customer) {
     return (
@@ -119,7 +140,7 @@ const CustomerDetail = () => {
                   <p className={cn(
                     'text-2xl font-bold font-mono',
                     customer.credit_score >= 750 ? 'text-success' :
-                    customer.credit_score >= 650 ? 'text-warning' : 'text-destructive'
+                      customer.credit_score >= 650 ? 'text-warning' : 'text-destructive'
                   )}>
                     {customer.credit_score || 'N/A'}
                   </p>

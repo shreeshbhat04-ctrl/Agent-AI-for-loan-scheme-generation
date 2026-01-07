@@ -14,6 +14,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from typing import Optional, List
 from pymongo import MongoClient
+import datetime
+
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -197,9 +199,10 @@ async def archive_conversation_to_mongo(
 
 # === PDF GENERATION ===
 
+# === PDF CLASS ===
 class PDF(FPDF):
+
     def header(self):
-        # Company + title (like the sample)
         self.set_font('Arial', 'B', 14)
         self.cell(0, 6, 'Tata Capital Finance Limited', 0, 1, 'C')
         self.ln(1)
@@ -210,207 +213,164 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-18)
         self.set_font('Arial', 'I', 7)
+        self.cell(0, 4, 'Tata Capital Finance Limited', 0, 1, 'C')
         self.cell(
             0, 4,
-            'Tata Capital Finance Limited',
-            0, 1, 'C'
-        )
-        self.cell(
-            0, 4,
-            'Registered Office: 11th Floor, Tower A, Peninsula Business Park, Ganpatrao Kadam Marg, Lower Parel, Mumbai - 400 013.',
+            'Registered Office: 11th Floor, Tower A, Peninsula Business Park, '
+            'Ganpatrao Kadam Marg, Lower Parel, Mumbai - 400 013.',
             0, 1, 'C'
         )
         self.cell(0, 4, f'Page {self.page_no()}', 0, 0, 'C')
 
 
-async def generate_sanction_pdf(request: SanctionRequest) -> Optional[str]:
-    try:
-        crm_url = f"{CRM_SERVICE_URL}/{request.customer_id}"
-        response = await app_http_client.get(crm_url)
-        cust = response.json() if response.status_code == 200 else {}
-    except Exception:
-        cust = {}
+# === PDF GENERATION FUNCTION ===
+async def generate_sanction_pdf(request) -> Optional[str]:
 
-    customer_name = cust.get('name', 'Customer')
-    co_applicant = cust.get('co_applicant_name')  # optional, if you have it
-    address = cust.get('address', '')             # can be single string or multi-line
-
+    customer_name = getattr(request, "customer_name", "Customer")
+    address = getattr(request, "address", "")
     today_str = datetime.date.today().strftime('%d-%b-%Y')
 
     pdf = PDF()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # ---- Date (right aligned) ----
+    # Date
     pdf.set_font('Arial', '', 9)
     pdf.cell(0, 5, f"Date: {today_str}", ln=1, align='R')
     pdf.ln(3)
 
-    # ---- Address block ----
+    # Address block
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 5, "To,", ln=1)
 
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(0, 5, customer_name.upper(), ln=1)
 
-    if co_applicant:
-        pdf.cell(0, 5, co_applicant.upper(), ln=1)
-
     pdf.set_font('Arial', '', 10)
-
-    if address:
-        for line in str(address).split('\n'):
-            if line.strip():
-                pdf.cell(0, 5, line.strip(), ln=1)
+    for line in str(address).split('\n'):
+        if line.strip():
+            pdf.cell(0, 5, line.strip(), ln=1)
 
     pdf.ln(5)
 
-    # ---- Subject ----
+    # Subject
     pdf.set_font('Arial', 'B', 10)
-    subject = (
-        f"Subject: Your Home Equity Loan Application No. "
-        f"{getattr(request, 'loan_id', '')}"
-    )
+    subject = f"Subject: Your Personal Loan Application No. {request.loan_id}"
     pdf.multi_cell(0, 5, subject)
-    pdf.ln(3)
 
-    # ---- Opening paragraph ----
-    pdf.set_font('Arial', '', 10)
-    intro = (
-        "Dear Sir/Madam,\n\n"
-        "We are pleased to inform you that based on your above mentioned application, "
-        "Tata Capital Finance Limited (hereinafter referred to as the \"Company\") "
-        "has in principle sanctioned the loan on the terms and conditions mentioned hereafter "
-        "and printed overleaf."
-    )
-    pdf.multi_cell(0, 5, intro)
+    pdf.ln(1)
+    pdf.cell(0, 5, "Loan Type: Personal Loan", ln=1)
     pdf.ln(4)
 
-    # ---- Description of the Property (generic line – adjust if you add fields) ----
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(0, 5, "Description of the Property:", ln=1)
+    # Intro
     pdf.set_font('Arial', '', 10)
     pdf.multi_cell(
         0, 5,
-        "Property as per details provided in your loan application and legal report."
+        "Dear Sir/Madam,\n\n"
+        "We are pleased to inform you that based on your above mentioned application, "
+        "Tata Capital Finance Limited (hereinafter referred to as the \"Company\") "
+        "has in principle sanctioned the Personal Loan on the terms and conditions "
+        "mentioned below and subject to execution of necessary documents."
     )
+
     pdf.ln(4)
 
-    # ---- Salient features heading ----
+    # Table heading
     pdf.set_font('Arial', 'B', 10)
-    pdf.cell(0, 5, "The salient features of financial terms of loan are as under:", ln=1)
+    pdf.cell(0, 5, "The salient features of the financial terms of the loan are as under:", ln=1)
     pdf.ln(3)
 
-    # ---- Table: headers ----
-    pdf.set_font('Arial', 'B', 8)
-
-    # try to roughly match columns in sample
-    col_widths = [23, 18, 24, 20, 22, 22, 18, 26, 22]
+    # Table setup
+    col_widths = [38, 28, 28, 38, 28]
     headers = [
-        "Total Amount\nSanctioned",
-        "Rate of\nInterest",
+        "Total Amount Sanctioned",
+        "Rate of Interest",
         "Tenure",
-        "Monthly Installment\n(EMI)",
-        "Processing\nFee",
+        "Monthly Installment (EMI)",
+        "Processing Fee"
     ]
+    row_height = 10
 
-    row_height = 8
-    # header row
-    for w, h in zip(col_widths, headers):
-        x_before = pdf.get_x()
-        y_before = pdf.get_y()
-        pdf.multi_cell(w, row_height / 2, h, border=1, align='C')
-        pdf.set_xy(x_before + w, y_before)
-    pdf.ln(row_height)
+    # Header row
+    pdf.set_font('Arial', 'B', 8)
+    x_start = pdf.get_x()
+    y_start = pdf.get_y()
 
-    # ---- Table: values ----
+    for i, header in enumerate(headers):
+        pdf.set_xy(x_start + sum(col_widths[:i]), y_start)
+        pdf.multi_cell(col_widths[i], row_height / 2, header, border=1, align='C')
+
+    pdf.set_y(y_start + row_height)
+
+    # Values
     pdf.set_font('Arial', '', 8)
 
-    # format values from request
-    amt_text = f"INR {request.loan_amount:,.2f}" if request.loan_amount else "INR -"
-    roi_text = f"{request.interest_rate:.2f}% (Floating)" if request.interest_rate else "-"
-    tenure_text = f"{request.tenure_months} Months" if request.tenure_months else "-"
-
-    #tchfl_rplr = getattr(request, "tchfl_rplr", None)
-    #spread = getattr(request, "spread_over_rplr", None)
-    emi = getattr(request, "emi", None)
-    processing_fee = getattr(request, "processing_fee", None)
-
-    #tchfl_text = f"{tchfl_rplr:.2f}" if tchfl_rplr is not None else "-"
-    #spread_text = f"{spread:+.2f}%" if spread is not None else "-"
-    emi_text = f"INR {emi:,.2f}" if emi is not None else "As per schedule"
-    proc_fee_text = (
-        f"INR {processing_fee:,.2f}" if processing_fee is not None else "As per sanction"
-    )
-
     values = [
-        amt_text,
-        #"NIL",                    # Insurance – adjust if you have value
-        #"NIL",                    # VAS – adjust if you have value
-        roi_text,
-        #tchfl_text,
-        #spread_text,
-        tenure_text,
-        emi_text,
-        proc_fee_text,
+        f"INR {request.loan_amount:,.2f}",
+        f"{request.interest_rate:.2f}% (Floating)",
+        f"{request.tenure_months} Months",
+        f"INR {request.emi:,.2f}",
+        f"INR {request.processing_fee:,.2f}",
     ]
 
-    for w, v in zip(col_widths, values):
-        pdf.cell(w, row_height, v, border=1, align='C')
-    pdf.ln(row_height + 2)
+    x_start = pdf.get_x()
+    y_start = pdf.get_y()
 
-    # ---- Notes (like the * NRPLR / ** Fixed ROI notes) ----
+    for i, value in enumerate(values):
+        pdf.set_xy(x_start + sum(col_widths[:i]), y_start)
+        pdf.multi_cell(col_widths[i], row_height, value, border=1, align='C')
+
+    pdf.set_y(y_start + row_height + 3)
+
+    # Notes
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(
         0, 4,
-        "* New Retail Prime Lending Rate NRPLR is the rate of interest announced by TCHFL "
-        "from time to time as its retail prime lending rate and shall govern the Rate of "
-        "Interest for your loan contract from time to time."
+        "* New Retail Prime Lending Rate (NRPLR) is the rate announced by the Company "
+        "from time to time and shall govern the applicable rate of interest."
     )
     pdf.ln(2)
     pdf.multi_cell(
         0, 4,
-        "** In case you have opted for Fixed Rate of Interest, the rate of interest shall be "
-        "fixed for the period mentioned hereinabove and upon expiry of the period of Fixed "
-        "Rate of Interest, the Loan shall attract floating (Adjustable) Rate of Interest "
-        "based on the then prevailing TCHFL NRPLR."
+        "** In case of Fixed Rate, upon expiry of the fixed period, the loan shall "
+        "attract a floating rate based on prevailing NRPLR."
     )
-    pdf.ln(4)
 
-    # ---- Special conditions ----
+    pdf.ln(5)
+
+    # Special conditions
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(0, 5, "Special Conditions:", ln=1)
     pdf.set_font('Arial', '', 9)
 
-    bullet_points = [
-        "Title deeds of the property/ies in original as per the legal report shall be "
-        "submitted prior to disbursement.",
-        "If the property is jointly owned by more than one person then all owners of the "
-        "property shall be co-applicants to the loan.",
-        "Loan shall not be used for any other purpose except the purpose as represented in "
-        "the application form.",
+    conditions = [
+        "The loan shall be utilized strictly for personal purposes only.",
+        "The borrower shall ensure timely payment of EMIs as per the repayment schedule.",
+        "Any delay or default may attract penal charges as per Company policy."
     ]
-    for b in bullet_points:
+
+    for c in conditions:
         pdf.cell(4, 4, "-")
-        pdf.multi_cell(0, 4, b)
+        pdf.multi_cell(0, 4, c)
         pdf.ln(1)
 
-    pdf.ln(6)
+    pdf.ln(8)
 
-    # ---- Signature placeholders ----
-    pdf.set_font('Arial', '', 9)
+    # Signatures
     pdf.cell(0, 5, "For Tata Capital Finance Limited", ln=1)
     pdf.ln(15)
-    # three signature lines similar to A/B/C in sample
-    x_start = pdf.get_x()
-    y_start = pdf.get_y()
+
+    x = pdf.get_x()
+    y = pdf.get_y()
     gap = 60
 
-    for i, label in enumerate(["A", "B", "C"]):
-        pdf.set_xy(x_start + i * gap, y_start)
-        pdf.cell(25, 5, "_" * 15, ln=0)
-        pdf.set_xy(x_start + i * gap, y_start + 6)
-        pdf.cell(25, 5, label, ln=0)
+    for i in range(3):
+        pdf.set_xy(x + i * gap, y)
+        pdf.cell(25, 5, "_" * 15)
+        pdf.set_xy(x + i * gap, y + 6)
+        pdf.cell(25, 5, "Authorized Signatory")
+
+
 
     # ---- Save file ----
     file_name = f"sanction_{request.customer_id}_{request.loan_id}.pdf"

@@ -45,6 +45,10 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import time
+from pymongo import MongoClient
+import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 load_dotenv()
 
@@ -60,6 +64,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 user_locks = defaultdict(asyncio.Lock)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "loan_archives")
+mongo_client = None
+
+# === POSTGRES CONFIG ===
+PG_DB_CONFIG = {
+    "dbname": os.getenv("DB_NAME", "loan_chatbot_db"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "shreesha04"),
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432")
+}
 
 # === RATE LIMITING FOR FREE TIER ===
 request_times = defaultdict(list)
@@ -163,7 +179,7 @@ async def tool_verify_kyc(customer_id: str) -> dict:
 
 @tool
 async def tool_analyze_bank_statement(file_path: str) -> dict:
-    """Analyze bank statement PDF to calculate financial health score. Returns score (0-100), insights, and transaction preview."""
+    """Analyze bank statement PDF to calculate financial health score. Extract income, expenses, and account balance. Returns score (0-100), insights, and transaction preview."""
     logger.info(f"Tool: Analyzing bank statement: {file_path}")
     try:
         # Read the file
@@ -362,7 +378,8 @@ CRITICAL RULES - FOLLOW EXACTLY:
      * Credit score 650-699: +3.5% rate + 24 months max
      * Below 650: Automatic rejection
    - Always use: loan_tenure_months=36 initially (will be adjusted by risk engine)
-   - If the amount is far more than 4X monthly_salary, then Call tool_analyze_bank_statement (provides financial health score) to get deeper insights before underwriting
+   - CRITICAL: If the requested amount is > 4x monthly_salary, you MUST ask for a bank statement and call tool_analyze_bank_statement to validate financial health before proceeding to underwriting.
+   - If user provides a bank statement file path, IMMEDIATELY call tool_analyze_bank_statement.
 9. DECISION - Based on underwriting status:
    - IF REJECTED: Explain the reason clearly (credit score, EMI affordability, etc.)
      * Call tool_archive_rejection with rejection reason
@@ -388,7 +405,13 @@ IMPORTANT NOTES:
 - Handle natural language amounts: "fifty thousand" = 50000
 - Be transparent about how risk-based pricing works
 
-Be polite, guide step-by-step, and ALWAYS use the correct tools for their expertise."""
+Be polite, guide step-by-step, and ALWAYS use the correct tools for their expertise.
+
+EXAMPLES:
+User: "I need 10 Lakhs but my salary is 50k."
+Agent: "That is a high amount compared to your income. To proceed, I need to analyze your financial health. Please upload your last 6 months' bank statement."
+User: "Here is the file: C:/docs/statement.pdf"
+Agent: [Calls tool_analyze_bank_statement(file_path="C:/docs/statement.pdf")]"""
 
 # === STATE DEFINITION ===
 class AgentState(TypedDict):
@@ -535,14 +558,44 @@ def should_continue(state: AgentState):
     logger.info("No tool calls detected, routing to END")
     return END
 
+def save_chat_message_to_mongo(customer_id: str, loan_id: int, sender: str, message_text: str):
+    """Save chat message to MongoDB"""
+    if not mongo_client:
+        return
+    
+    try:
+        db = mongo_client[MONGO_DB_NAME]
+        collection = db["chat_messages"]
+        
+        doc = {
+            "customer_id": customer_id,
+            "loan_id": loan_id,
+            "sender": sender,
+            "message_text": message_text,
+            "timestamp": datetime.datetime.utcnow()
+        }
+        collection.insert_one(doc)
+    except Exception as e:
+        logger.error(f"Error saving chat message: {e}")
+
+
 # === HTTP CLIENT & GRAPH LIFECYCLE ===
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global app_http_client, app_graph, memory_saver
+    global app_http_client, app_graph, memory_saver, mongo_client
     
     app_http_client = httpx.AsyncClient(timeout=30.0)
     memory_saver = MemorySaver()
     
+    # Setup MongoDB
+    try:
+        mongo_client = MongoClient(MONGO_URI)
+        mongo_client.admin.command('ping')
+        logger.info("Connected to MongoDB")
+    except Exception as e:
+        logger.error(f"MongoDB connection failed: {e}")
+    
+    # Setup LangGraph workflow
     workflow = StateGraph(AgentState)
     workflow.add_node("agent", call_model)
     workflow.add_node("tools", call_tool)
@@ -564,6 +617,8 @@ async def lifespan(app: FastAPI):
     yield
     
     await app_http_client.aclose()
+    if mongo_client:
+        mongo_client.close()
 
 # === FASTAPI APP ===
 app = FastAPI(title="Loan Chatbot - LangGraph", lifespan=lifespan)
@@ -596,6 +651,7 @@ async def reset_conversation(customer_id: str):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """Chat endpoint with LangGraph."""
+    
     global app_graph
     customer_id = request.customer_id
     message = request.message
@@ -624,19 +680,21 @@ async def chat(request: ChatRequest):
             except:
                 is_first = True
             
+            # Define loan_id early so it's available for save_chat_message_to_mongo
+            try:
+                loan_id = int(customer_id)
+            except ValueError:
+                loan_id = abs(hash(customer_id)) % 1000000
+            
             if is_first:
                 user_content = f"{SYSTEM_PROMPT}\n\nCustomer ID: {customer_id}\n\nUser: {message}"
             else:
                 user_content = message
             
             user_message = HumanMessage(content=user_content)
-            
+            save_chat_message_to_mongo(customer_id, loan_id, "user", message)
             input_state = {"messages": [user_message]}
             if is_first:
-                try:
-                    loan_id = int(customer_id)
-                except ValueError:
-                    loan_id = abs(hash(customer_id)) % 1000000
                 
                 input_state.update({
                     "customer_id": customer_id,
@@ -675,7 +733,7 @@ async def chat(request: ChatRequest):
                         ai_reply = content['text']
                 else:
                     ai_reply = str(content)
-                
+                save_chat_message_to_mongo(customer_id, loan_id, "bot", ai_reply)
                 logger.info(f"Response to {customer_id}: {ai_reply[:100]}...")
                 return {"reply": ai_reply}
             
@@ -684,6 +742,107 @@ async def chat(request: ChatRequest):
         except Exception as e:
             logger.error(f"Chat error for {customer_id}: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+# === ADMIN API ENDPOINTS ===
+
+def get_pg_connection():
+    try:
+        conn = psycopg2.connect(**PG_DB_CONFIG)
+        return conn
+    except Exception as e:
+        logger.error(f"Postgres connection error: {e}")
+        return None
+
+@app.get("/admin/customers")
+async def get_all_customers():
+    """Fetch all customers with their latest loan status."""
+    conn = get_pg_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # Fetch customers and join with latest loan status if available
+        query = """
+            SELECT 
+                c.cust_id, c.name, c.age, c.gender, c.phone, c.address, 
+                c.credit_score, c.pre_approved_limit, c.interest_options, 
+                c.category, c.aadhaar,
+                l.status as loan_status, l.approved_amount as loan_amount
+            FROM customers c
+            LEFT JOIN (
+                SELECT DISTINCT ON (cust_id) cust_id, status, approved_amount 
+                FROM loans 
+                ORDER BY cust_id, created_at DESC
+            ) l ON c.cust_id = l.cust_id
+        """
+        cursor.execute(query)
+        customers = cursor.fetchall()
+        return customers
+    except Exception as e:
+        logger.error(f"Error fetching customers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/admin/customer/{cust_id}")
+async def get_customer_detail(cust_id: str):
+    """Fetch single customer details."""
+    conn = get_pg_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT * FROM customers WHERE cust_id = %s", (cust_id,))
+        customer = cursor.fetchone()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+            
+        # Get loans
+        cursor.execute("SELECT * FROM loans WHERE cust_id = %s ORDER BY created_at DESC", (cust_id,))
+        loans = cursor.fetchall()
+        
+        customer['loans'] = loans
+        return customer
+    except Exception as e:
+        logger.error(f"Error fetching customer detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/admin/chat/{cust_id}")
+async def get_chat_history(cust_id: str):
+    """Fetch chat history from MongoDB."""
+    if not mongo_client:
+        raise HTTPException(status_code=500, detail="MongoDB not connected")
+    
+    try:
+        db = mongo_client[MONGO_DB_NAME]
+        collection = db["chat_messages"]
+        
+        # Determine loan_id (using the simple hashing logic from chat endpoint for consistency if needed, 
+        # but ideally we should query by cust_id directly if possible. 
+        # The save function uses cust_id, so we can query by it.)
+        
+        chats = list(collection.find({"customer_id": cust_id}).sort("timestamp", 1))
+        
+        # Convert ObjectId and datetime to string
+        formatted_chats = []
+        for chat in chats:
+            formatted_chats.append({
+                "id": str(chat.get("_id")),
+                "cust_id": chat.get("customer_id"),
+                "sender": chat.get("sender"),
+                "message": chat.get("message_text"),
+                "timestamp": chat.get("timestamp").isoformat() if chat.get("timestamp") else None
+            })
+            
+        return formatted_chats
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

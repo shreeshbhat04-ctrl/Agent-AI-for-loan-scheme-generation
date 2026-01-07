@@ -20,7 +20,8 @@ function Start-Agent {
     # 1. Activate venv
     # 2. Change directory
     # 3. Run uvicorn (No --reload for stability)
-    $Command = "& '$VENV_PATH'; cd '$AgentPath'; uvicorn $AppString --port $Port"
+    $Command = "& '$VENV_PATH'; cd '$AgentPath'; python -m uvicorn $AppString --port $Port"
+
     
     Write-Host "Launching $Title on port $Port..."
     

@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { ChatHistory } from '@/components/admin/ChatHistory';
-import { customers, chatHistory, getChatHistoryByCustomer, getCustomerById } from '@/data/customers';
-import { MessageSquare, Search, Users, ArrowRight } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getCustomers, getChatHistory } from '@/api/admin';
+import { Customer } from '@/data/customers';
+import { MessageSquare, Search, Users, ArrowRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -11,27 +13,35 @@ const ChatLogs = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
-  // Get unique customer IDs from chat history
-  const customersWithChats = useMemo(() => {
-    const customerIds = [...new Set(chatHistory.map(c => c.cust_id))];
-    return customerIds.map(id => ({
-      customer: getCustomerById(id),
-      lastMessage: chatHistory
-        .filter(c => c.cust_id === id)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0],
-      messageCount: chatHistory.filter(c => c.cust_id === id).length,
-    })).filter(item => item.customer);
-  }, []);
+  // Fetch all customers first to populate the list
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: getCustomers,
+  });
+
+  // Get unique customer IDs from chat history logic is simplified here: 
+  // We actually need a way to know WHICH customers have chats. 
+  // For now, we'll list ALL customers, highlighting ones with chats could be a future enhancement.
+  // Or, better, we filter customers locally.
 
   const filteredCustomers = useMemo(() => {
-    return customersWithChats.filter(item => 
-      item.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.customer?.cust_id.includes(searchQuery)
+    return customers.filter(c =>
+      c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.cust_id?.includes(searchQuery)
     );
-  }, [customersWithChats, searchQuery]);
+  }, [customers, searchQuery]);
 
-  const selectedCustomer = selectedCustomerId ? getCustomerById(selectedCustomerId) : null;
-  const selectedMessages = selectedCustomerId ? getChatHistoryByCustomer(selectedCustomerId) : [];
+  const selectedCustomer = useMemo(() =>
+    customers.find(c => c.cust_id === selectedCustomerId),
+    [customers, selectedCustomerId]
+  );
+
+  // Fetch chats for selected customer
+  const { data: selectedMessages = [], isLoading: isLoadingChats } = useQuery({
+    queryKey: ['chat', selectedCustomerId],
+    queryFn: () => getChatHistory(selectedCustomerId!),
+    enabled: !!selectedCustomerId,
+  });
 
   return (
     <AdminLayout>
@@ -64,30 +74,24 @@ const ChatLogs = () => {
             </div>
 
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
-              {filteredCustomers.map(({ customer, lastMessage, messageCount }) => (
+
+              {filteredCustomers.map((customer) => (
                 <div
-                  key={customer?.cust_id}
-                  onClick={() => setSelectedCustomerId(customer?.cust_id || null)}
-                  className={`p-3 rounded-xl cursor-pointer transition-all ${
-                    selectedCustomerId === customer?.cust_id
-                      ? 'bg-primary/20 border border-primary/50'
-                      : 'bg-secondary/50 hover:bg-secondary'
-                  }`}
+                  key={customer.cust_id}
+                  onClick={() => setSelectedCustomerId(customer.cust_id)}
+                  className={`p-3 rounded-xl cursor-pointer transition-all ${selectedCustomerId === customer.cust_id
+                    ? 'bg-primary/20 border border-primary/50'
+                    : 'bg-secondary/50 hover:bg-secondary'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold">
-                      {customer?.name.charAt(0)}
+                      {customer.name?.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{customer?.name}</p>
+                      <p className="font-medium text-sm truncate">{customer.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {lastMessage?.message.slice(0, 40)}...
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs text-primary font-mono">{messageCount}</span>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(lastMessage?.timestamp || ''), 'MMM d')}
+                        ID: {customer.cust_id}
                       </p>
                     </div>
                   </div>
@@ -127,7 +131,11 @@ const ChatLogs = () => {
                 </div>
 
                 <div className="max-h-[500px] overflow-y-auto pr-2">
-                  <ChatHistory messages={selectedMessages} customerName={selectedCustomer.name} />
+                  {isLoadingChats ? (
+                    <div className="flex justify-center p-4"><Loader2 className="animate-spin" /></div>
+                  ) : (
+                    <ChatHistory messages={selectedMessages} customerName={selectedCustomer.name} />
+                  )}
                 </div>
               </>
             ) : (

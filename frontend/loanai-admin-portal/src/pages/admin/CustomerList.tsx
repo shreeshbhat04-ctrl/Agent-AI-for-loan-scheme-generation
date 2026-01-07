@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { CustomerCard } from '@/components/admin/CustomerCard';
-import { customers, Customer } from '@/data/customers';
-import { Search, Filter, Users } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { getCustomers } from '@/api/admin';
+import { Customer } from '@/data/customers';
+import { Search, Filter, Users, Loader2 } from 'lucide-react';
 
 const categories = ['All', 'Good Customer', 'Self Employed', 'Bargainer', 'Risk', 'New Customer'];
 const statuses = ['All', 'Approved', 'Pending', 'Rejected', 'Under Review'];
@@ -12,19 +14,46 @@ const CustomerList = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
 
+
+  const { data: customers = [], isLoading, error } = useQuery({
+    queryKey: ['customers'],
+    queryFn: getCustomers,
+  });
+
   const filteredCustomers = useMemo(() => {
     return customers.filter((customer) => {
-      const matchesSearch = 
-        customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.cust_id.includes(searchQuery) ||
-        customer.phone.includes(searchQuery);
-      
+      const nameMatch = customer.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+      const idMatch = customer.cust_id?.includes(searchQuery) || false;
+      const phoneMatch = customer.phone?.includes(searchQuery) || false;
+
+      const matchesSearch = nameMatch || idMatch || phoneMatch;
+
       const matchesCategory = selectedCategory === 'All' || customer.category === selectedCategory;
       const matchesStatus = selectedStatus === 'All' || customer.loan_status === selectedStatus;
 
       return matchesSearch && matchesCategory && matchesStatus;
     });
-  }, [searchQuery, selectedCategory, selectedStatus]);
+  }, [customers, searchQuery, selectedCategory, selectedStatus]);
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  if (error) {
+    return (
+      <AdminLayout>
+        <div className="p-12 text-center text-red-500">
+          Failed to load customers. Please check backend connection.
+        </div>
+      </AdminLayout>
+    )
+  }
 
   return (
     <AdminLayout>
