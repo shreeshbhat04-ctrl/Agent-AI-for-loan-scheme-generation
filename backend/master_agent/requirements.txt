@@ -3,7 +3,7 @@
 
 # Core LangChain packages - Using latest stable versions
 langchain>=0.3.0
-langchain-core>=1.1.1
+langchain-core>=0.3.0
 langgraph>=0.2.0
 
 # Google Gemini integration - Latest version (3.2.0 as of Nov 2025)
