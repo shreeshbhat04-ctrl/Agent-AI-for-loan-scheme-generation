@@ -2,10 +2,10 @@ name: Python Backend CI
 
 on:  
   push:
-    branches:  [main, develop]
+    branches: [main, develop]
     paths:
       - 'backend/**'
-      - '. github/workflows/python-backend-ci.yml'
+      - '.github/workflows/python-backend-ci.yml'
   pull_request:
     branches: [main, develop]
     paths:  
@@ -35,13 +35,13 @@ jobs:
           pip install -r backend/requirements.txt
           pip install -r backend/master_agent/requirements.txt
       
-      - name:  Lint with pylint
-        run:  |
+      - name: Lint with pylint
+        run: |
           pylint backend/ --disable=C0111,C0103,W0703 || true
         continue-on-error: true
       
       - name: Lint with flake8
-        run:  |
+        run: |
           flake8 backend/ --count --select=E9,F63,F7,F82 --show-source --statistics
       
       - name: Run pytest
@@ -51,7 +51,5 @@ jobs:
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
         with:
-          file: ./coverage.xml
-          flags: python
-          name: python-coverage
-          fail_ci_if_error: false
+          name: coverage-reports
+          path: coverage.xml
