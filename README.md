@@ -131,11 +131,16 @@ Install npm packages for both admin and user side:
 cd frontend
 cd loanai-admin-portal
 npm install
-```
-for running this locally
-```bash
 npm run dev
 ```
+```bash
+#then in UI
+cd UI
+cd fintrust-portal
+npm install
+npm run dev
+```
+
 
 # Future Developments
 
