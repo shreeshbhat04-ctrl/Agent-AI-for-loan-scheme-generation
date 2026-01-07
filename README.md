@@ -126,7 +126,16 @@ Run the provided helper script from the backend/ folder:
 ```
 # Launch Frontend
 
-Simply open frontend/index.html in your web browser.
+Install npm packages for both admin and user side:
+```bash
+cd frontend
+cd loanai-admin-portal
+npm install
+```
+for running this locally
+```bash
+npm run dev
+```
 
 # Future Developments
 
