@@ -1,0 +1,60 @@
+name: TypeScript Frontend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths: 
+      - 'frontend/**'
+      - '.github/workflows/typescript-frontend-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix: 
+        node-version: ['18. x', '20.x']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name:  Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run:  npm ci
+      
+      - name:  Run ESLint
+        working-directory: frontend
+        run:  npm run lint
+        continue-on-error: true
+      
+      - name: Check code formatting with Prettier
+        working-directory:  frontend
+        run: npx prettier --check .
+        continue-on-error: true
+      
+      - name: Run tests
+        working-directory: frontend
+        run: npm test -- --coverage --watchAll=false
+        continue-on-error: true
+      
+      - name: Build application
+        working-directory: frontend
+        run: npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build-${{ matrix.node-version }}
+          path: frontend/build
+          retention-days: 7
