@@ -1,29 +1,29 @@
 name: TypeScript Frontend CI
 
-on:
+on: 
   push:
-    branches: [main, develop]
+    branches:  [main, develop]
     paths: 
       - 'frontend/**'
-      - '.github/workflows/typescript-frontend-ci.yml'
-  pull_request:
+      - '.github/workflows/typescript-frontend-ci. yml'
+  pull_request: 
     branches: [main, develop]
     paths:
       - 'frontend/**'
 
-jobs:
-  build-and-test:
+jobs: 
+  build-and-test: 
     runs-on: ubuntu-latest
     
-    strategy:
+    strategy: 
       matrix: 
-        node-version: ['18.x', '20.x']   # ✅ fixed spacing
+        node-version: ['18.x', '20.x']
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - name:  Use Node.js ${{ matrix. node-version }}
+        uses:  actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -31,21 +31,21 @@ jobs:
       
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run:  npm ci
       
-      - name: Run ESLint
+      - name:  Run ESLint
         working-directory: frontend
         run: npm run lint
         continue-on-error: true
       
       - name: Check code formatting with Prettier
-        working-directory: frontend
+        working-directory:  frontend
         run: npx prettier --check .
         continue-on-error: true
       
       - name: Run tests
         working-directory: frontend
-        run: npm test -- --coverage --watchAll=false
+        run:  npm test -- --coverage --watchAll=false
         continue-on-error: true
       
       - name: Build application
@@ -53,7 +53,8 @@ jobs:
         run: npm run build
       
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4   # ✅ specify v4
+        uses:  actions/upload-artifact@v4
         with:
-          name: build-artifacts
-          path: frontend/build
+          name:  frontend-build-${{ matrix. node-version }}
+          path:  frontend/build
+          retention-days: 7
