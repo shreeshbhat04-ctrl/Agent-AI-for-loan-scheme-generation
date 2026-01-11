@@ -35,6 +35,13 @@ jobs:
           pip install -r backend/requirements.txt
           pip install -r backend/master_agent/requirements.txt
       
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+          sudo apt-get install -y libgl1-mesa-glx
+          sudo apt-get install -y poppler-utils
+      
       - name: Lint with pylint
         run: |
           pylint backend/ --disable=C0111,C0103,W0703 || true
