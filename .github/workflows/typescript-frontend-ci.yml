@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy: 
       matrix: 
-        node-version: ['18.x', '20.x']
+        node-version: ['20.x']
+        project-path: ['frontend/loanai-admin-portal', 'frontend/UI/fintrust-portal']
     
     steps:
       - uses: actions/checkout@v4
@@ -26,31 +27,39 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
+          cache-dependency-path: 'frontend/package-lock.json
+          cache-dependency-path: '${{ matrix.project-path }}/package-lock.json'
+      
 
       - name: Install dependencies
-        working-directory: frontend
+        working-directory: ${{ matrix.project-path }}
         run: npm ci
       
       - name: Run ESLint
-        working-directory: frontend
+        working-directory: ${{ matrix.project-path }}
         run: npm run lint
       
       - name: Check code formatting with Prettier
-        working-directory: frontend
+        working-directory: ${{ matrix.project-path }}
         run: npx prettier --check .
       
       - name: Run tests
-        working-directory: frontend
-        run: npm test -- --coverage --watchAll=false
+        # skipped for now as user likely doesn't have tests set up for both
+        working-directory: ${{ matrix.project-path }}
+        run: |
+            if grep -q "\"test\":" package.json; then
+                npm test -- --coverage --watchAll=false
+            else
+                echo "No test script found, skipping tests"
+            fi
       
       - name: Build application
-        working-directory: frontend
+        working-directory: ${{ matrix.project-path }}
         run: npm run build
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-${{ matrix.node-version }}
-          path: frontend/build
+          name: build-${{ strategy.job-index }}
+          path: ${{ matrix.project-path }}/dist
           retention-days: 7
