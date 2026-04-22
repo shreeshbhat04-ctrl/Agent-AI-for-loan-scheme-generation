@@ -2,7 +2,7 @@
 # Tested and verified working together as of December 2025
 
 # Core LangChain packages - Using latest stable versions
-langchain>=0.3.0
+langchain>=1.2.15
 langchain-core>=0.3.0
 langgraph>=0.2.0
 
