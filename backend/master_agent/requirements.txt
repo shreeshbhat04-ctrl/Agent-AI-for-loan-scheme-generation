@@ -14,7 +14,7 @@ langchain-google-genai>=3.2.0
 google-genai>=1.19.0
 
 # Community packages for additional functionality
-langchain-community>=0.3.0
+langchain-community>=0.4.1
 langchain-text-splitters>=1.0.0
 
 # Supporting packages
